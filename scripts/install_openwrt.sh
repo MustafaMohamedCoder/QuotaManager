@@ -98,6 +98,12 @@ if uci -q get dhcp.@dnsmasq[0] >/dev/null 2>&1; then
     uci commit dhcp
     log "dnsmasq: confdir=/etc/dnsmasq.d, leasefile=/var/lib/misc/dnsmasq.leases"
 fi
+# Browsing-history log. OpenWrt runs dnsmasq in a jail (ujail) that may not see
+# /var/log, which makes dnsmasq refuse to start ("cannot open log") and takes
+# DHCP/DNS down - so this is self-checking: if dnsmasq is not up afterwards,
+# the fragment is removed again and history logging stays off.
+touch /var/log/quota-dnsmasq.log && chmod 666 /var/log/quota-dnsmasq.log
+uci -q set dhcp.@dnsmasq[0].sandbox='0' && uci commit dhcp
 cat > /etc/dnsmasq.d/quota-dnslog.conf <<'DNSEOF'
 # Written by install_openwrt.sh - browsing-history log read by QuotaManager
 log-queries=extra
@@ -106,6 +112,12 @@ DNSEOF
 # ifb (speed limits) loads at boot via kmod autoload; make sure it is up now
 modprobe ifb 2>/dev/null || true
 /etc/init.d/dnsmasq restart 2>/dev/null || true
+sleep 3
+if ! pidof dnsmasq >/dev/null 2>&1; then
+    log "dnsmasq did not start with the history log - disabling that log"
+    rm -f /etc/dnsmasq.d/quota-dnslog.conf
+    /etc/init.d/dnsmasq restart 2>/dev/null || true
+fi
 
 cp "$APP_DIR/scripts/systemctl.openwrt" /usr/bin/systemctl && chmod 755 /usr/bin/systemctl
 cp "$APP_DIR/scripts/quota-manager.openwrt" /etc/init.d/quota-manager && chmod 755 /etc/init.d/quota-manager
