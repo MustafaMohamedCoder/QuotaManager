@@ -12,9 +12,11 @@ set -eu
 
 APP_DIR=/opt/QuotaManager
 REPO=${QM_REPO:-https://github.com/UserJoo9/QuotaManager.git}
-PKGS="python3 python3-pip python3-cryptography python3-yaml python3-sqlite3 \
-nftables kmod-nft-core kmod-nft-nat ip-full tc-full kmod-ifb kmod-sched \
-dnsmasq-full git git-http ca-bundle"
+# required: the install stops if one of these cannot be installed
+PKGS="python3 python3-pip python3-cryptography python3-yaml nftables kmod-nft-core \
+ip-full dnsmasq-full git git-http ca-bundle"
+# optional: speed limits / NAT helpers; a package missing in your feed is skipped
+OPT_PKGS="python3-sqlite3 kmod-nft-nat tc-full kmod-ifb kmod-sched"
 
 log() { echo "[quota-manager] $*"; }
 die() { echo "[quota-manager] ERROR: $*" >&2; exit 1; }
@@ -30,6 +32,7 @@ if command -v apk >/dev/null 2>&1; then
     apk del dnsmasq 2>/dev/null || true
     # shellcheck disable=SC2086
     retry apk add $PKGS || die "apk add failed (see output above)"
+    for p in $OPT_PKGS; do apk add "$p" >/dev/null 2>&1 || log "optional package $p not available - skipped"; done
 elif command -v opkg >/dev/null 2>&1; then
     PM=opkg
     log "package manager: opkg"
@@ -37,6 +40,7 @@ elif command -v opkg >/dev/null 2>&1; then
     opkg remove dnsmasq 2>/dev/null || true
     # shellcheck disable=SC2086
     retry opkg install $PKGS || die "opkg install failed (see output above)"
+    for p in $OPT_PKGS; do opkg install "$p" >/dev/null 2>&1 || log "optional package $p not available - skipped"; done
 else
     die "neither apk nor opkg found - is this OpenWrt?"
 fi
