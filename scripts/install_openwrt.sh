@@ -107,8 +107,8 @@ DNSEOF
 modprobe ifb 2>/dev/null || true
 /etc/init.d/dnsmasq restart 2>/dev/null || true
 
-install -m 755 "$APP_DIR/scripts/systemctl.openwrt" /usr/bin/systemctl
-install -m 755 "$APP_DIR/scripts/quota-manager.openwrt" /etc/init.d/quota-manager
+cp "$APP_DIR/scripts/systemctl.openwrt" /usr/bin/systemctl && chmod 755 /usr/bin/systemctl
+cp "$APP_DIR/scripts/quota-manager.openwrt" /etc/init.d/quota-manager && chmod 755 /etc/init.d/quota-manager
 mkdir -p /overlay/quota-gateway
 /etc/init.d/quota-manager enable
 /etc/init.d/quota-manager restart || /etc/init.d/quota-manager start
