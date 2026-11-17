@@ -98,6 +98,35 @@ if uci -q get dhcp.@dnsmasq[0] >/dev/null 2>&1; then
     uci commit dhcp
     log "dnsmasq: confdir=/etc/dnsmasq.d, leasefile=/var/lib/misc/dnsmasq.leases"
 fi
+# --- DHCP for the client subnet (192.168.2.0/24 by default) -------------------
+# Devices must get an address + gateway + DNS = THIS router, otherwise their
+# traffic bypasses it (straight to the main router) and nothing is counted.
+# Values come from config.yaml (dhcp: section); the stock uci lan DHCP stays
+# disabled (ignore=1) so there is exactly one range. The main router's DHCP
+# server MUST be turned off by you (see README).
+cfgval() { awk -v k="$1" '/^dhcp:/{f=1;next} /^[A-Za-z]/{f=0} f && $1==k":" {print $2; exit}' "$APP_DIR/config.yaml"; }
+GW=$(cfgval gateway_ip);     GW=${GW:-192.168.2.1}
+P_START=$(cfgval pool_start); P_START=${P_START:-192.168.2.100}
+P_END=$(cfgval pool_end);     P_END=${P_END:-192.168.2.200}
+P_MASK=$(cfgval subnet);      P_MASK=${P_MASK:-255.255.255.0}
+P_LEASE=$(cfgval lease_hours); P_LEASE=${P_LEASE:-24}
+cat > /etc/dnsmasq.d/quota-gateway.conf <<DHCPEOF
+# Written by install_openwrt.sh - Quota Manager client DHCP
+dhcp-authoritative
+dhcp-sequential-ip
+dhcp-range=$P_START,$P_END,$P_MASK,${P_LEASE}h
+dhcp-option=3,$GW
+dhcp-option=6,$GW
+log-dhcp
+DHCPEOF
+# keep the gateway address on br-lan across reboots (dnsmasq starts before the app)
+if uci -q get network.lan >/dev/null 2>&1 && ! uci -q get network.lan.ipaddr | grep -q "$GW"; then
+    uci add_list network.lan.ipaddr="$GW/24"
+    uci commit network
+    log "added $GW/24 to network.lan (applies after reboot or: /etc/init.d/network reload)"
+fi
+log "DHCP for clients: $P_START-$P_END, gateway/DNS $GW. Turn OFF DHCP on the main router."
+
 # Browsing-history log. OpenWrt runs dnsmasq in a jail (ujail) that may not see
 # /var/log, which makes dnsmasq refuse to start ("cannot open log") and takes
 # DHCP/DNS down - so this is self-checking: if dnsmasq is not up afterwards,
